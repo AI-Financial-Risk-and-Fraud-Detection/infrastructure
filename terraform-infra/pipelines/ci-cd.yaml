@@ -1,0 +1,82 @@
+resource "aws_codepipeline" "terraform_pipeline" {
+  name     = "Terraform-Deploy"
+  role_arn = aws_iam_role.codepipeline_role.arn
+
+  artifact_store {
+    location = "codepipeline-artifacts-bucket"
+    type     = "S3"
+  }
+
+  stage {
+    name = "Source"
+    action {
+      name             = "Fetch_Code"
+      category         = "Source"
+      owner            = "AWS"
+      provider         = "CodeCommit"
+      version          = "1"
+      output_artifacts = ["SourceArtifact"]
+      configuration = {
+        RepositoryName = "terraform-infrastructure"
+        BranchName     = "main"
+      }
+    }
+  }
+
+  stage {
+    name = "Plan"
+    action {
+      name             = "Terraform_Plan"
+      category         = "Build"
+      owner            = "AWS"
+      provider         = "CodeBuild"
+      version          = "1"
+      input_artifacts  = ["SourceArtifact"]
+      output_artifacts = ["PlanArtifact"]
+      configuration = {
+        ProjectName = aws_codebuild_project.terraform_plan.name
+      }
+    }
+  }
+
+  stage {
+    name = "Approval"
+    action {
+      name      = "Manual_Approval"
+      category  = "Approval"
+      owner     = "AWS"
+      provider  = "Manual"
+      version   = "1"
+    }
+  }
+
+  stage {
+    name = "Apply"
+    action {
+      name            = "Terraform_Apply"
+      category        = "Build"
+      owner           = "AWS"
+      provider        = "CodeBuild"
+      version         = "1"
+      input_artifacts = ["PlanArtifact"]
+      configuration = {
+        ProjectName = aws_codebuild_project.terraform_apply.name
+      }
+    }
+  }
+
+  stage {
+    name = "Rollback"
+    action {
+      name            = "Rollback_on_Failure"
+      category        = "Build"
+      owner           = "AWS"
+      provider        = "CodeBuild"
+      version         = "1"
+      input_artifacts = ["PlanArtifact"]
+      configuration = {
+        ProjectName = aws_codebuild_project.terraform_rollback.name
+      }
+    }
+  }
+}
